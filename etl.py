@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List
 import uuid
 import datetime
+import json
 
 
 @dataclass
@@ -173,3 +174,52 @@ class ETL:
                 afw.role, afw.created_at
             ))
         self.pg_conn.commit()
+
+    def extract_writers(self) -> List[Person]:
+        cursor = self.sqlite_conn.cursor()
+        select_writers_ids_query = "SELECT id, writers FROM movies WHERE writers IS NOT NULL;"
+        cursor.execute(select_writers_ids_query)
+
+        rows = cursor.fetchall()
+
+        writers_movies = {}
+
+        for row in rows:
+            writers_ids = json.loads(row[1])
+            for writer in writers_ids:
+                if writer['id'] not in writers_movies:
+                    writers_movies[writer['id']] = []
+                writers_movies[writer['id']].append(row[0])
+
+        writers = []
+
+        select_writers_query = "SELECT id, name FROM writers;"
+        cursor.execute(select_writers_query)
+
+        writers_rows = cursor.fetchall()
+        for row in writers_rows:
+            writers.append(
+                Person(
+                    id=uuid.UUID(row[0]),
+                    full_name=row[1],
+                    birth_date="",
+                    created_at=datetime.datetime.now().isoformat(),
+                    updated_at=datetime.datetime.now().isoformat(),
+                )
+            )
+
+        writers_film_works = []
+
+        for writer_id, movie_ids in writers_movies.items():
+            for movie_id in movie_ids:
+                writers_film_works.append(
+                    FilmWorkPerson(
+                        id=uuid.uuid4(),
+                        film_work_id=uuid.UUID(movie_id),
+                        person_id=uuid.UUID(writer_id),
+                        role="writer",
+                        created_at=datetime.datetime.now().isoformat(),
+                    )
+                )
+
+        return writers, writers_film_works
